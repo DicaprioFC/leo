@@ -3,6 +3,7 @@ import pandas as pd
 import streamlit as st
 import re
 import matplotlib.pyplot as plt
+from io import BytesIO
 
 def col2num(col_str):
     expn = 0
@@ -19,20 +20,17 @@ def extraer_fecha_archivo(nombre_archivo):
         return coincidencia.group(1), coincidencia.group(2), coincidencia.group(3)
     return None
 
-def cargar_archivos(ruta, columnas, fila_inicial):
+def cargar_archivos(archivos_subidos, columnas, fila_inicial):
     dataframes = []
     col_inicio, col_fin = [col2num(col) for col in columnas.split(':')]
     usecols = list(range(col_inicio, col_fin + 1))
 
-    archivos_excel = [archivo for archivo in os.listdir(ruta) if archivo.endswith('.xlsx')]
-
-    for archivo in archivos_excel:
-        ruta_completa = os.path.join(ruta, archivo)
+    for archivo in archivos_subidos:
         try:
-            xls = pd.ExcelFile(ruta_completa)
+            xls = pd.ExcelFile(archivo)
             if 'ITEM_O' in xls.sheet_names:
-                df = pd.read_excel(ruta_completa, sheet_name='ITEM_O', usecols=usecols, skiprows=fila_inicial-1)
-                fecha_info = extraer_fecha_archivo(archivo)
+                df = pd.read_excel(archivo, sheet_name='ITEM_O', usecols=usecols, skiprows=fila_inicial-1)
+                fecha_info = extraer_fecha_archivo(archivo.name)
                 if fecha_info:
                     año, mes, dia = fecha_info
                     df['Año'] = año
@@ -40,9 +38,9 @@ def cargar_archivos(ruta, columnas, fila_inicial):
                     df['Día'] = dia
                 dataframes.append(df)
             else:
-                st.warning(f"La hoja 'ITEM_O' no se encuentra en el archivo {archivo}.")
+                st.warning(f"La hoja 'ITEM_O' no se encuentra en el archivo {archivo.name}.")
         except Exception as e:
-            st.error(f"Error al leer el archivo {archivo}: {e}")
+            st.error(f"Error al leer el archivo {archivo.name}: {e}")
 
     if dataframes:
         df_final = pd.concat(dataframes, ignore_index=True)
@@ -76,15 +74,15 @@ def generar_graficos(df, output_folder):
 def main():
     st.title("Proceso ETL - Archivos Excel")
 
-    ruta = st.text_input("Ingrese la ruta de la carpeta con los archivos Excel")
+    archivos_subidos = st.file_uploader("Suba los archivos Excel", accept_multiple_files=True, type=['xlsx'])
     columnas = st.text_input("Ingrese el rango de columnas (ej. A:C):")
     fila_inicial = st.number_input("Ingrese el número de fila inicial:", min_value=1, value=1)
 
     if st.button("Procesar Datos"):
-        if ruta and columnas and fila_inicial:
-            df_final = cargar_archivos(ruta, columnas, fila_inicial)
+        if archivos_subidos and columnas and fila_inicial:
+            df_final = cargar_archivos(archivos_subidos, columnas, fila_inicial)
             if not df_final.empty:
-                output_folder = ruta
+                output_folder = "."
                 output_path = os.path.join(output_folder, 'Out.xlsx')
                 df_final.to_excel(output_path, index=False)
                 bar_chart_path, pie_chart_path = generar_graficos(df_final, output_folder)
